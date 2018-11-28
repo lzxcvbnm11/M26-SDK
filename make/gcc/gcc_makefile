@@ -22,8 +22,7 @@ C_PREDEF=-D __CUSTOMER_CODE__
 #-------------------------------------------------------------------------------
 # Configure the Cloud Solution
 #-------------------------------------------------------------------------------
-CLOUD_SOLUTION =
-#GITWIZS_SOLUTION
+CLOUD_SOLUTION =GITWIZS_SOLUTION
 
 #-------------------------------------------------------------------------------
 # Configure version and out target
@@ -57,7 +56,6 @@ SRC_DIRS=example    \
 		 ril\src    \
 
 
-
 #-------------------------------------------------------------------------------
 # Configure source code files to compile in the source code directories
 #-------------------------------------------------------------------------------
@@ -66,7 +64,6 @@ SRC_SYS_RIL=$(wildcard ril/src/*.c)
 SRC_EXAMPLE=$(wildcard example/*.c)
 SRC_CUS=$(wildcard custom/*.c)
 SRC_FOTA=$(wildcard custom/fota/src/*.c)
-
 
 OBJS=\
 	 $(patsubst %.c, $(OBJ_DIR)/%.o, $(SRC_SYS))        \
