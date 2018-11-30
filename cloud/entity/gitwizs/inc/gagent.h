@@ -85,7 +85,7 @@
 #define MCU_ERROR_POS          8
 #define MCU_HDR_LEN            8
 #define MCU_LEN_NO_PAYLOAD     9
-#define MCU_HDR_FF             0xFF
+#define MCU_HDR_FF             0x23
 #define MCU_P0_POS             8
 #define MCU_BYTES_NO_SUM        3
 #define LOCAL_GAGENTSTATUS_MASK 0x1FFF
@@ -185,7 +185,9 @@ typedef enum
     MSG_ID_GSERVER_TIME_RESPONSE,
     MSG_ID_GPRS_STATUS_CHECK,
     MSG_ID_MODULE_STATUS_UPDATE,
-
+    MSG_ID_MCU_SEND_CYCLE_CAN_MESSAGE,
+    MSG_ID_MCU_SEND_CAN_MESSAGE,
+    MSG_ID_MQTT_SEND_TO_MCU_UPGRADE,
  }Enum_GAGENT_MSG_TYPE;
 
 

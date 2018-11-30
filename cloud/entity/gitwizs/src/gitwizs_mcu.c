@@ -92,6 +92,9 @@ void gagent_mcu_task(s32 taskId)
             case MSG_ID_MODULE_STATUS_UPDATE:
                 gagent_module_status_update(0,0,&module_status);
                 break;
+            case MSG_ID_MQTT_SEND_TO_MCU_UPGRADE:
+                //gagent_send_upgrade_pack_to_mcu(0,0,&module_status);
+                break;
             default:
                 break;
         }

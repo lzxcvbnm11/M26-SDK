@@ -8,10 +8,10 @@
 #include "hal_uart.h"
 #include "hal_timer.h"
 #include "utils.h"
-
+#include "uart_protol.h"
 
 #define HAL_UART_PORT   (UART_PORT3)
-#define HAL_UART_BAUDRATE     (9600)
+#define HAL_UART_BAUDRATE     (115200)
 #define HAL_UART_DATABITS      (DB_8BIT)
 #define HAL_UART_PARITY        (PB_NONE)
 #define HAL_UART_STOPBITS        (SB_ONE)
@@ -30,6 +30,7 @@
 
 
 u8 *hal_RxBuffer=NULL;
+u8 *hal_CanAllMessage=NULL;
 
 static u32 pos_start = 0;
 static u32 pos_current = 0;
@@ -261,7 +262,9 @@ s32 HAL_Local_ExtractOnePacket(u8 *buf)
 {
     u8 data;
     u32 i = 0;
-
+    u16 data_len = 0;
+    u16 mesg_checksum = 0;
+    u16 checksum = 0;
     while((pos_start & HAL_BUF_MASK) != (pos_current & HAL_BUF_MASK))
     {
         data = __halbuf_read(pos_start);
@@ -271,99 +274,50 @@ s32 HAL_Local_ExtractOnePacket(u8 *buf)
             if(MCU_HDR_FF == data)
             {
                 gu8LocalHalStatus = LOCAL_HAL_REC_SYNCHEAD2;
-
-                guiLocalPacketStart = pos_start;
             }
         }
         else if(LOCAL_HAL_REC_SYNCHEAD2 == gu8LocalHalStatus)
         {
             if(MCU_HDR_FF == data)
             {
-                gu8LocalHalStatus = LOCAL_HAL_REC_DATALEN1;
+                /*跳过一个数据起始字节*/
+                UART_PROTOL_HEAD_ST *message_head = (UART_PROTOL_HEAD_ST *)(&(hal_RxBuffer[(pos_start & HAL_BUF_MASK) + 1]));
+                data_len = message_head->data_len_h * 256 + message_head->data_len_l;
+                mesg_checksum = hal_RxBuffer[((pos_start + data_len) & HAL_BUF_MASK) + 2]*256 + hal_RxBuffer[((pos_start + data_len) & HAL_BUF_MASK) + 3];
+                //checksum = Crc16Count(&(hal_RxBuffer[(pos_start & HAL_BUF_MASK) + 1]) , data_len);
+                checksum = mesg_checksum;
+                if(mesg_checksum == checksum)  
+                {
+                    gu8LocalHalStatus = LOCAL_HAL_REC_DATALEN1;
+
+                }
+                else
+                {
+                    /*0x23 0x23 ......but checksum not correct*/
+                    gu8LocalHalStatus = LOCAL_HAL_REC_SYNCHEAD2;
+                }  
+               
             }
             else
             {
                 gu8LocalHalStatus = LOCAL_HAL_REC_SYNCHEAD1;
             }
+           
         }
         else
         {
-            if(halRecKeyWord)
-            {
-                halRecKeyWord = 0;
-                if(0x55 == data)
-                {
-                    data = 0xff;
-                    HAL_Move_Data_Backward(hal_RxBuffer, pos_start + 1, pos_current, 1);
-                    pos_current--;
-                    pos_start--;
-
-                }
-                else if(MCU_HDR_FF == data)
-                {
-                    gu8LocalHalStatus = LOCAL_HAL_REC_DATALEN1;
-                    guiLocalPacketStart = pos_start - 1;
-                    pos_start++;
-                    continue;
-                }
-                else
-                {
-                    if(LOCAL_HAL_REC_DATALEN1 == gu8LocalHalStatus)
-                    {
-                        guiLocalPacketStart = pos_start - 2;
-                    }
-                    else
-                    {
-                        gu8LocalHalStatus = LOCAL_HAL_REC_SYNCHEAD1;
-                        pos_start++;
-                        continue;
-                    }
-                }
-
-            }
-            else
-            {
-                if(MCU_HDR_FF == data)
-                {
-                    halRecKeyWord = 1;
-                    pos_start++;
-                    continue;
-                }
-            }
+            
 
             if(LOCAL_HAL_REC_DATALEN1 == gu8LocalHalStatus)
             {
-                gu16LocalPacketDataLen = data;
-                gu16LocalPacketDataLen = (gu16LocalPacketDataLen << 8) & 0xff00;
-                gu8LocalHalStatus = LOCAL_HAL_REC_DATALEN2;
-            }
-            else if(LOCAL_HAL_REC_DATALEN2 == gu8LocalHalStatus)
-            {
-                gu16LocalPacketDataLen += data;
-                gu8LocalHalStatus = LOCAL_HAL_REC_DATA;
 
-                if(0 == gu16LocalPacketDataLen)
+                while(data_len > 0)
                 {
-                    /* invalid packet */
-                    gu8LocalHalStatus = LOCAL_HAL_REC_SYNCHEAD1;
+                    buf[i++] = __halbuf_read(pos_start++);
+                    data_len--;
                 }
-            }
-            else
-            {
-                /* Rec data */
-                gu16LocalPacketDataLen--;
-                if(0 == gu16LocalPacketDataLen)
-                {
-                    pos_start++;
-                    i = 0;
-                    while(guiLocalPacketStart != pos_start)
-                    {
-                        buf[i] = __halbuf_read(guiLocalPacketStart++);
-                        i++;
-                    }
 
-                    return i;
-                }
+                return i;
             }
             
         }
@@ -619,121 +573,92 @@ void HAL_Local_Ack2MCU( s32 fd,u8 sn,u8 cmd )
 }
 
 
+u8 update_can_message(pgcontext pgc,ppacket Rxbuf,s32 RxLen)
+{
+    u8 i = 0 ,j=0,k=0;
+    u8 can_message_cnt = 0;
+    UART_PROTOL_HEAD_ST *head = (UART_PROTOL_HEAD_ST *)Rxbuf;
+    CAN_MESSAGE_INFO_ST *can_message = (CAN_MESSAGE_INFO_ST *)(Rxbuf + MESSAGE_HEAD_SIZE);
+   // can_message_cnt = 
+    
+    /*received data*/
+    if(head->message_id)
+    {
+        Adapter_SendMsg(g_cloud_task_id,MSG_ID_MCU_SEND_CAN_MESSAGE,(void *)pgc,NULL);
+    }
 
+    for(j=0;j<12;j++)
+    {
+         for(i = 0;i<pgc->gc.filer_id_cnt;i++)
+         {
+            /*如果不是过滤的ID保存到公用的BUF中*/
+            if( pgc->gc.filer_id[i] != can_message->id)
+            {
+               
+                memcpy(&pgc->mcu.cycle_can_message,can_message,sizeof(CAN_MESSAGE_INFO_ST));
+            }
+            can_message++;
+        }
+    }
+   
+    pgc->mcu.cyc_can_message_cnt = j;
+    Adapter_SendMsg(g_cloud_task_id,MSG_ID_MCU_SEND_CYCLE_CAN_MESSAGE,(void *)pgc,NULL);
+}
 s32 Hal_LocalDataHandle( pgcontext pgc,ppacket Rxbuf,s32 RxLen /*,ppacket Txbuf*/ )
 {
-    s8 cmd=0;
+    s8 cmd_l=0;
+    s8 cmd_h=0;
     u8 sn=0,checksum=0;
     u8 *localRxbuf=NULL;
     u32 ret = 0;
     u8 configType=0;
+    UART_PROTOL_HEAD_ST *head;
     //_tm tm;
     s32 piecelen;
     int i;
     if( RxLen>0 )
     {
-        localRxbuf = Rxbuf->phead;
+        head = (UART_PROTOL_HEAD_ST *)Rxbuf->phead;
         
-        cmd = localRxbuf[4];
-        sn  = localRxbuf[5];
-        checksum = GAgent_SetCheckSum( localRxbuf,RxLen-1 );
-        if( checksum!=localRxbuf[RxLen-1] )
-        {
-            APP_DEBUG("local data cmd=%02x checksum error,calc sum:0x%x,expect:0x%x !\r\n",
-                cmd, checksum, localRxbuf[RxLen-1] );
-            Hal_Local_ErrHandle( pgc, Rxbuf);
-            return UART_ERROR_CHECKSUM;
-        }
-        switch( cmd )
-        {
+        cmd_l = head->cmd_l;
+        cmd_h = head->cmd_h;
 
-            case MCU_REPORT:
-                HAL_Local_Ack2MCU( pgc->rtinfo.local.uart_fd,sn,cmd+1 );
-                Rxbuf->type = SetPacketType( Rxbuf->type,LOCAL_DATA_IN,1 );
-                ParsePacket( Rxbuf );
-                ret = 1;
-                setChannelAttrs(pgc, NULL,1);
-                break;
-           case MCU_RESET_MODULE:
-                HAL_Local_Ack2MCU( pgc->rtinfo.local.uart_fd,sn,cmd+1 );                
-                GAgent_Clean_Config(pgc);
-                Adapter_Sleep(2);
-                Adapter_DevReset();
-                ret = 0;
-                break;
-
+        switch(cmd_l)
+        {
+            case SUCCEED_ACK:
+            {
  
-            case MCU_INFO_CMD_ACK:
-                if(RET_SUCCESS == Hal_Local_CheckAck(pgc, cmd, sn))
-                {
-                    Hal_Local_ExtractInfo(pgc, Rxbuf);
-                }
-                ret = 0;
+            break;
+            }
+            case FAILE_ACK:
                 break;
-
-           case MODULE_PING2MCU_ACK:
-                Hal_Local_CheckAck(pgc, cmd, sn);
-               // g_mcu_hearbeat_count = 0;
-               // APP_DEBUG("\r\n module ping to mcu is ok\r\n");
-                HAL_Timer_Stop(HAL_MCU_ACK_TIMER);
-                Adapter_SendMsg(g_mcu_task_id,MSG_ID_MCU_ACK_SUCCESS,NULL,NULL);
+            case SEND_MESSAGE:
+            {
+                switch(cmd_h)
+                {
+  
+                    case RT_REPORT:
+                        update_can_message(pgc,Rxbuf,RxLen);
+                        break;
+                    case REPLACEMENT_REPORT:
+                        break;
+                    case CONTROL_CMMOND:
+                        break;
+                    case STATUS_INFO_REPORT:
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            }
                 
-                Adapter_SendMsg(g_main_task_id,MSG_ID_MCU_PING_RSP_OK,NULL,NULL);
-                ret = 0 ;
-                break;
-           case MCU_CTRL_CMD_ACK:
-                if(RET_SUCCESS == Hal_Local_CheckAck(pgc, cmd, sn))
-                {
-                    /* out to app and cloud, for temp */
-                    APP_DEBUG("ctrl cmd ack is ok\r\n");
-                    HAL_Timer_Stop(HAL_MCU_ACK_TIMER);
-                    Adapter_SendMsg(g_mcu_task_id,MSG_ID_MCU_ACK_SUCCESS,NULL,NULL);
-                    Adapter_SendMsg(g_cloud_task_id,MSG_ID_MCU_ACK_SUCCESS,NULL,NULL);
-                    Rxbuf->type = SetPacketType( Rxbuf->type,LOCAL_DATA_IN,1 );
-                    ParsePacket( Rxbuf );
-                    setChannelAttrs(pgc, &pgc->rtinfo.waninfo.srcAttrs, 0);
-                    //uh2:send ctrl cmd ack to cloud
-                    Rxbuf->type = SetPacketType( Rxbuf->type,CLOUD_DATA_OUT,1 );
-                    ret = 1;
-
-                }
-                break;
-             case MODULE_RESET_MCU_ACK:
-                Hal_Local_CheckAck(pgc, cmd, sn);
-                HAL_Timer_Stop(HAL_MCU_ACK_TIMER);
-                APP_DEBUG("reset mcu ack is ok\r\n");
-                Adapter_SendMsg(g_mcu_task_id,MSG_ID_MCU_ACK_SUCCESS,NULL,NULL);
-                ret = 0;
-                break;
-             case MCU_REQ_GSERVER_TIME:
-               //Hal_Local_CheckAck(pgc, cmd, sn);
-               global_sn = sn;
-               Adapter_SendMsg(g_cloud_task_id,MSG_ID_GSERVER_TIME_REQUEST,NULL,NULL);
-               ret = 0;
-               break;
-             case MCU_RESTART_GAGENT:
-                HAL_Local_Ack2MCU( pgc->rtinfo.local.uart_fd, sn, MCU_RESTART_GAGENT_ACK);
-                Adapter_Sleep(100);
-                Adapter_DevReset();
-                break;
-             case MCU_QUERY_MODULE_INFO:
-                resetPacket( pgc->rtinfo.Txbuf );
-                GAgent_sendmoduleinfo( pgc );
-                HAL_Ack2MCUwithP0( pgc->rtinfo.Txbuf, pgc->rtinfo.local.uart_fd, sn, MCU_QUERY_MODULE_INFO_ACK);
-                resetPacket( pgc->rtinfo.Txbuf );                
-                break;
-            case MODULE_STATUS2MCU_ACK:
-                Hal_Local_CheckAck(pgc, cmd, sn);
-                APP_DEBUG("status updata ack\r\n");
-                HAL_Timer_Stop(HAL_MCU_ACK_TIMER);
-                Adapter_SendMsg(g_mcu_task_id,MSG_ID_MCU_ACK_SUCCESS,NULL,NULL);
-                ret = 0 ;
-                break;
-            default:
-                ret = 0;
-                break;
+            default :
+            APP_DEBUG("error other cmd ! id = %d\r\n", head->message_id);
+            break;
+            //Hal_Local_ErrHandle( pgc, Rxbuf);
+            //return UART_ERROR_CHECKSUM;
         }
-        //...
+       
     }
 
   return ret;
@@ -797,7 +722,34 @@ static void Local_CallBack_UART_Hdlr( Enum_SerialPort port, Enum_UARTEventType e
 }
 
 
-
+/*-----------------------------------------------------------
+-------------------------------------------------------------*/
+u16 Crc16Count(unsigned char* pArray,u16 len)
+{
+    u16 ui16InitCrc = 0xffff;
+    u16 ui16Crc = 0;
+    u16 ui16i;
+    unsigned char ui8j;
+    unsigned char ui8ShiftBit;
+    
+    for(ui16i = 0;ui16i<len;ui16i++)
+    {
+        
+        ui16InitCrc ^= pArray[ui16i];
+        for(ui8j=0;ui8j<8;ui8j++)
+        {
+           ui8ShiftBit = ui16InitCrc&0x01;
+           ui16InitCrc >>= 1;
+        if(ui8ShiftBit != 0)
+           {
+                ui16InitCrc ^= 0xa001;
+                
+           }            
+        }
+    }
+    ui16Crc = ui16InitCrc;
+    return ui16Crc;
+}
 
 #endif
 #endif

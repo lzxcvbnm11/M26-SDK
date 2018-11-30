@@ -4,6 +4,7 @@
 
 
 #include "ql_type.h"
+#include "uart_protol.h"
 
 #define M2MSERVER_LEN         (128)
 #define IMEI_LEN               (30)
@@ -162,8 +163,11 @@ typedef struct _XPG_MCU
     u8      soft_ver[MCU_SOFTVER_LEN+1];
     u8      product_key[PK_LEN+1];
     u8      mcu_attr[MCU_MCUATTR_LEN];
+    CYCLE_CAN_MESSAGE_ST cycle_can_message;
+    u8      cyc_can_message_cnt;
     localTxbufInfo TxbufInfo;   
 }XPG_MCU;
+
 
 typedef struct GAGENT_CONFIG
 {
@@ -178,7 +182,10 @@ typedef struct GAGENT_CONFIG
     s8    old_productkey[PK_LEN + 1];    /* Add 1byte '\0' */
     u8    m2m_ip[IP_LEN_MAX + 1];        /* Add 1byte '\0' */
     u8    GServer_ip[5];    /* Add 1byte '\0' */
-    s8    rsvd[256];
+    u32   filer_id[256];
+    u8    filer_id_cnt;
+    u8    sampling_rate;
+    s8    rsvd[16];
 }GAGENT_CONFIG_S, gconfig, *pgconfig;
 
 

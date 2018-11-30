@@ -8,7 +8,7 @@
 #include "hal_uart.h"
 #include "hal_timer.h"
 #include "cloud.h"
-
+#include "uart_protol.h" 
 
 pgcontext pgContextData = NULL;
 static u8 g_SN;
@@ -21,7 +21,11 @@ extern int g_mcu_ack_count ;
 extern s32 g_mcu_task_id;
 
 
-
+static int message_id [] =
+{
+    0xa04567
+};
+#define FILTER_ID_CNT (sizeof(message_id)/sizeof(int))
 
 
 /****************************************************************
@@ -175,6 +179,8 @@ s32 GAgent_LocalDataWriteP0( pgcontext pgc,s32 fd,ppacket pTxBuf,u8 cmd )
     u16 sendLen = 0;
     u32 msgid;
     ST_MSG msg;
+    UART_PROTOL_HEAD_ST msg_head;
+    u16 checksum = 0;
 
     if(pgc->mcu.isBusy)
     {
@@ -184,6 +190,27 @@ s32 GAgent_LocalDataWriteP0( pgcontext pgc,s32 fd,ppacket pTxBuf,u8 cmd )
 
     /* step 1. add head... */
     /* head(0xffff)| len(2B) | cmd(1B) | sn(1B) | flag(2B) |  payload(xB) | checksum(1B) */
+    datalen = (pTxBuf->pend) - (pTxBuf->phead);
+    switch(cmd)
+    {
+        case UPGRADE_PACK_LOAD:
+            msg_head.cmd_h = UPGRADE_PACK_LOAD;
+            msg_head.cmd_l = SEND_MESSAGE;
+            msg_head.message_id = 0;
+            msg_head.data_len_h = get_u16_h(datalen);
+            msg_head.data_len_l = get_u16_l(datalen);
+            msg_head.is_encrypt = 0;            /*是否加密*/
+            /*拷贝数据头到Txbuf中*/
+            memcpy( pTxBuf->phead - MESSAGE_HEAD_SIZE, &msg_head,MESSAGE_HEAD_SIZE);
+            checksum = Crc16Count(pTxBuf->phead - MESSAGE_HEAD_SIZE,datalen+MESSAGE_HEAD_SIZE);
+            pTxBuf->pend[0] =  get_u16_h(checksum);
+            pTxBuf->pend[1] =  get_u16_l(checksum);
+            pTxBuf->pend += 2;
+        break;
+        default :
+        break;
+    }
+    #if 0
     pTxBuf->phead = pTxBuf->ppayload - 8;
     pTxBuf->phead[0] = MCU_HDR_FF;
     pTxBuf->phead[1] = MCU_HDR_FF;
@@ -201,6 +228,7 @@ s32 GAgent_LocalDataWriteP0( pgcontext pgc,s32 fd,ppacket pTxBuf,u8 cmd )
     pgc->mcu.TxbufInfo.cmd = pTxBuf->phead[4];
     pgc->mcu.TxbufInfo.sn = pTxBuf->phead[5];
     pgc->mcu.TxbufInfo.local_send_len = sendLen;
+    #endif
     /* step 2. send data */
     HAL_Local_SendData( fd, pTxBuf->phead,sendLen );
     pgc->mcu.isBusy = 1;
@@ -254,7 +282,8 @@ u8 GAgent_NewSN(void)
 {
     if(g_SN >= 255)
     {
-        g_SN = 1;
+        g_SN = 1;
+
     }
     return g_SN++;
 }
@@ -443,6 +472,14 @@ void GAgent_VarInit( pgcontext *pgc )
     
     APP_DEBUG("magic num is :%d\r\n",(*pgc)->gc.magicNumber);
 
+    if(((*pgc)->gc.filer_id[0])&&CAN_ID_MASK)
+    {
+        for(i=0;i<FILTER_ID_CNT;i++)
+        {
+           (*pgc)->gc.filer_id[i] = message_id[i];
+        }
+    }
+
     if((*pgc)->gc.magicNumber != GAGENT_MAGIC_NUM)
     {
         Adapter_Memset(&((*pgc)->gc), 0, sizeof(GAGENT_CONFIG_S));
@@ -600,7 +637,7 @@ static s32 qeng_callback(char* line, u32 len, void* userData)
 
     APP_DEBUG("line = %s\r\n",line);
 
-    if (Ql_RIL_FindString(line, len, "+QENG:"))// find <CR><LF>OK<CR><LF>,OK<CR><LF>, <CR>OK<CR>��?<LF>OK<LF>
+    if (Ql_RIL_FindString(line, len, "+QENG:"))// find <CR><LF>OK<CR><LF>,OK<CR><LF>, <CR>OK<CR>¡ê?<LF>OK<LF>
     {
         Ql_sscanf(line,"%*[^:]: %d",&dump);
         
@@ -631,11 +668,11 @@ static s32 qeng_callback(char* line, u32 len, void* userData)
         #endif
     }
 
-    if (Ql_RIL_FindLine(line, len, "OK"))// find <CR><LF>OK<CR><LF>,OK<CR><LF>, <CR>OK<CR>��?<LF>OK<LF>
+    if (Ql_RIL_FindLine(line, len, "OK"))// find <CR><LF>OK<CR><LF>,OK<CR><LF>, <CR>OK<CR>¡ê?<LF>OK<LF>
     {
         return  RIL_ATRSP_SUCCESS;
     }
-    else if (Ql_RIL_FindLine(line, len, "ERROR")) // find <CR><LF>ERROR<CR><LF>, <CR>ERROR<CR>��?<LF>ERROR<LF>
+    else if (Ql_RIL_FindLine(line, len, "ERROR")) // find <CR><LF>ERROR<CR><LF>, <CR>ERROR<CR>¡ê?<LF>ERROR<LF>
     {
         return  RIL_ATRSP_FAILED;
     }
