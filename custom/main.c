@@ -25,7 +25,6 @@
  *   Developer can program the application based on this example.
  * 
  ****************************************************************************/
- #define __CUSTOMER_CODE__
 #ifdef __CUSTOMER_CODE__
 #include "custom_feature_def.h"
 #include "ril.h"
