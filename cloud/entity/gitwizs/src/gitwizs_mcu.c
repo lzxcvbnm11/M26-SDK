@@ -49,6 +49,7 @@ void gagent_mcu_task(s32 taskId)
                 //HAL_Local_SendData(s32 fd,u8 * pData,u32 bufferMaxLen)
                 break;
             case MSG_ID_PING_REQUEST:
+                APP_DEBUG("-------%s-----\r\n",__FUNCTION__);
                 GAgent_LocalDataWriteP0(PGC, PGC->rtinfo.local.uart_fd, PGC->rtinfo.Txbuf, MODULE_PING2MCU);
                 break;
             case MSG_ID_GSERVER_TIME_RESPONSE:

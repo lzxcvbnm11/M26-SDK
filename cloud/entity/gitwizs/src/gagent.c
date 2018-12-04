@@ -71,6 +71,8 @@ void GAgent_LocalInit( pgcontext pgc )
     Adapter_TimerStart(HAL_MCU_HEATBEAT_TIMER,MCU_HEARTBEAT,TRUE);
     GAgent_LocalGetInfo(pgc);
     Adapter_SendMsg(g_cloud_task_id,MSG_ID_GPRS_OK_HINT,(void *)pgc,NULL);
+    //Adapter_SendMsg(g_cloud_task_id,MSG_ID_MQTT_SOCKET_INIT,(void *)pgc,NULL);
+    
 
 }
 
@@ -108,6 +110,7 @@ void GAgent_LocalGetInfo( pgcontext pgc )
     
     for( i=0;i<count;i++ )
     {
+        APP_DEBUG("-------%s-----\r\n",__FUNCTION__);
         ret = GAgent_LocalDataWriteP0(pgc, pgc->rtinfo.local.uart_fd, pgc->rtinfo.Txbuf, MCU_INFO_CMD);
         if(RET_SUCCESS == ret)
         {
@@ -131,7 +134,7 @@ void GAgent_LocalGetInfo( pgcontext pgc )
     
         APP_DEBUG(" GAgent get local info fail ...\r\n ");
         APP_DEBUG(" Please check your local data,and restart GAgent again !!\r\n");
-        Adapter_DevReset();
+        //Adapter_DevReset();
     }
 }
 
@@ -230,6 +233,7 @@ s32 GAgent_LocalDataWriteP0( pgcontext pgc,s32 fd,ppacket pTxBuf,u8 cmd )
     pgc->mcu.TxbufInfo.local_send_len = sendLen;
     #endif
     /* step 2. send data */
+    APP_DEBUG("-------%s-------\r\n",__FUNCTION__);
     HAL_Local_SendData( fd, pTxBuf->phead,sendLen );
     pgc->mcu.isBusy = 1;
     if( ((pTxBuf->type)&(LOCAL_DATA_OUT)) == LOCAL_DATA_OUT )

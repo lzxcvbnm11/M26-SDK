@@ -283,9 +283,11 @@ s32 HAL_Local_ExtractOnePacket(u8 *buf)
                 /*跳过一个数据起始字节*/
                 UART_PROTOL_HEAD_ST *message_head = (UART_PROTOL_HEAD_ST *)(&(hal_RxBuffer[(pos_start & HAL_BUF_MASK) + 1]));
                 data_len = message_head->data_len_h * 256 + message_head->data_len_l;
-                mesg_checksum = hal_RxBuffer[((pos_start + data_len) & HAL_BUF_MASK) + 2]*256 + hal_RxBuffer[((pos_start + data_len) & HAL_BUF_MASK) + 3];
-                //checksum = Crc16Count(&(hal_RxBuffer[(pos_start & HAL_BUF_MASK) + 1]) , data_len);
-                checksum = mesg_checksum;
+                // APP_DEBUG("data_len = %d\n",data_len);
+                // APP_DEBUG("cmd_l = %02x,cmd_h= %02x\r\n",message_head->cmd_l,message_head->cmd_h);
+                mesg_checksum = hal_RxBuffer[((pos_start + data_len) & HAL_BUF_MASK) + 1 + MESSAGE_HEAD_SIZE]*256 + hal_RxBuffer[((pos_start + data_len) & HAL_BUF_MASK) + 1 + MESSAGE_HEAD_SIZE + 1];
+                checksum = Crc16Count(&(hal_RxBuffer[(pos_start & HAL_BUF_MASK) + 1]) , data_len + MESSAGE_HEAD_SIZE);
+                //checksum = mesg_checksum;
                 if(mesg_checksum == checksum)  
                 {
                     gu8LocalHalStatus = LOCAL_HAL_REC_DATALEN1;
@@ -294,7 +296,10 @@ s32 HAL_Local_ExtractOnePacket(u8 *buf)
                 else
                 {
                     /*0x23 0x23 ......but checksum not correct*/
+                    APP_DEBUG("message checksum = %04x, checksum = %04x\r\n",mesg_checksum,checksum);
+                    memcpy(buf,hal_RxBuffer + pos_start + 1,data_len + MESSAGE_HEAD_SIZE);
                     gu8LocalHalStatus = LOCAL_HAL_REC_SYNCHEAD2;
+                    return data_len + MESSAGE_HEAD_SIZE;
                 }  
                
             }
@@ -311,13 +316,14 @@ s32 HAL_Local_ExtractOnePacket(u8 *buf)
             if(LOCAL_HAL_REC_DATALEN1 == gu8LocalHalStatus)
             {
 
-                while(data_len > 0)
-                {
-                    buf[i++] = __halbuf_read(pos_start++);
-                    data_len--;
-                }
+                // while(data_len > 0)
+                // {
+                //     buf[i++] = __halbuf_read(pos_start++);
+                //     //APP_DEBUG("buf[%d] = %02x\r\n",i,buf[i-1]);
+                //     data_len--;
+                // }
 
-                return i;
+                // return i;
             }
             
         }
@@ -390,6 +396,7 @@ void HAL_Ack2MCUwithP0( ppacket pbuf, s32 fd,u8 sn,u8 cmd )
 
     sendLen = (pbuf->pend) - (pbuf->phead);
     sendLen = Gagent_Local_DataAdapter( (pbuf->phead)+2,( (pbuf->pend) ) - ( (pbuf->phead)+2 ) );
+    APP_DEBUG("-------%s-------\r\n",__FUNCTION__);
     HAL_Local_SendData( fd, pbuf->phead,sendLen );
     
     return;
@@ -568,6 +575,7 @@ void HAL_Local_Ack2MCU( s32 fd,u8 sn,u8 cmd )
     buf[MCU_CMD_POS] = cmd;
     buf[MCU_SN_POS] = sn;
     buf[MCU_LEN_NO_PAYLOAD-1]=GAgent_SetCheckSum( buf, (MCU_LEN_NO_PAYLOAD-1));
+    APP_DEBUG("-------%s-------\r\n",__FUNCTION__);
     HAL_Local_SendData( fd,buf,len );
     return ;
 }

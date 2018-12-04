@@ -166,6 +166,7 @@ static void Timer_MCU_Ack_Handler(u32 timerId, void* param)
     }
     else
     {
+        APP_DEBUG("-------%s-------\r\n",__FUNCTION__);
         HAL_Local_SendData(pgc->rtinfo.local.uart_fd,pgc->rtinfo.Txbuf->phead,pgc->mcu.TxbufInfo.local_send_len);
         HAL_Timer_Start(HAL_MCU_ACK_TIMER,MCU_ACK_TIME_MS,FALSE);
     }
